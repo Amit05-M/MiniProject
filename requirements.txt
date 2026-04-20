@@ -1,10 +1,16 @@
-fer>=22.4.0
-opencv-python>=4.8.0
-numpy>=1.24.0
-pytest>=7.4.0
-pygame>=2.1.0
-requests>=2.30.0
-sounddevice>=0.4.0
+# Web server
 Flask>=2.3.0
+gunicorn>=21.2.0
+ 
+# Emotion detection
+fer>=22.4.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+ 
+# Audio analysis
 librosa>=0.10.0
 soundfile>=0.12.1
+ 
+# Utilities
+requests>=2.30.0
+ 
