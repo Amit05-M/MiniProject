@@ -6,9 +6,18 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import librosa
-import numpy as np
-import cv2
+try:
+    import librosa
+except ImportError:
+    librosa = None
+try:
+    import numpy as np
+except ImportError:
+    np = None
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 from flask import Flask, jsonify, render_template, request
 
 try:
@@ -224,4 +233,7 @@ def analyze() -> Any:
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_ENV") != "production"
+    app.run(debug=debug, host="0.0.0.0", port=port)
