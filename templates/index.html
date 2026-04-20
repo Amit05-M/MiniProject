@@ -1,134 +1,74 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Emotion-Based Music Recommender</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-mQ93GR8f+X9ty2D2b1FK+H3j7sEQKAqXQPF3k7Hd+oU5aI2r+OPaowHEonly9SI3" crossorigin="anonymous">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  </head>
-  <body>
-    <nav class="navbar navbar-dark bg-dark shadow-sm">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="#">MoodBeat Studio</a>
-        <span class="text-muted">Live emotion music recommendations</span>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MoodBeat Studio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="noise"></div>
+
+  <nav>
+    <div class="nav-inner">
+      <div class="logo"><span class="logo-dot"></span>MoodBeat Studio</div>
+      <span class="nav-tag">AI · Emotion · Music</span>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">Emotion-Powered Recommendations</p>
+        <h1>Feel the music<br><em>that fits your mood</em></h1>
+        <p class="sub">Your face and voice tell us how you feel. We find Marathi &amp; Hindi songs that match — instantly.</p>
+        <button id="startButton" class="btn-start"><span class="btn-icon">▶</span> Start Detection</button>
       </div>
-    </nav>
+      <div class="hero-stats">
+        <div class="stat-box"><span class="stat-num">9+</span><span class="stat-label">Songs</span></div>
+        <div class="stat-box"><span class="stat-num">5</span><span class="stat-label">Emotions</span></div>
+        <div class="stat-box"><span class="stat-num">2</span><span class="stat-label">Languages</span></div>
+      </div>
+    </section>
 
-    <main class="container py-5">
-      <section class="hero-section mb-5 text-white">
-        <div class="row align-items-center gy-4">
-          <div class="col-lg-7">
-            <div class="hero-card p-5 rounded-4 shadow-lg">
-              <span class="badge bg-info bg-opacity-20 text-info mb-3">Live emotion-powered music</span>
-              <h1 class="display-5 fw-bold">MoodBeat Studio</h1>
-              <p class="lead text-muted">Scan your face and voice to discover Marathi song recommendations with YouTube previews and Spotify links.</p>
-              <p class="text-muted">This app blends webcam emotion detection with audio mood analysis for a richer recommendation experience.</p>
-              <button id="startButton" class="btn btn-primary btn-lg mt-3">Start Detection</button>
-            </div>
+    <section class="grid-section">
+      <div class="panel camera-panel">
+        <div class="panel-header"><div class="panel-dot green"></div><span>Live Camera Feed</span></div>
+        <div class="camera-frame">
+          <video id="videoPreview" playsinline muted></video>
+          <div id="cameraPlaceholder" class="cam-placeholder">
+            <div class="cam-icon">📷</div>
+            <p>Camera preview appears here</p>
+            <p class="hint">Allow camera &amp; mic when prompted</p>
           </div>
-          <div class="col-lg-5">
-            <div class="stats-card p-4 rounded-4 shadow-lg bg-gradient">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <p class="text-muted mb-1">Songs available</p>
-                  <h3 class="mb-0">9+</h3>
-                </div>
-                <div>
-                  <p class="text-muted mb-1">Emotions</p>
-                  <h3 class="mb-0">5</h3>
-                </div>
-              </div>
-              <p class="small text-light">Fast browser scanning, mobile-friendly layout, and smooth playback cards.</p>
-            </div>
+          <div id="videoOverlay" class="cam-overlay hidden">
+            <div class="scan-line"></div>
+            <p>Scanning your mood…</p>
           </div>
         </div>
-      </section>
-
-      <div class="row gx-4 gy-4">
-        <div class="col-xl-5">
-          <div class="card camera-card h-100 rounded-4 overflow-hidden border-0">
-            <div class="card-body p-4">
-              <div class="d-flex align-items-center justify-content-between mb-4">
-                <div>
-                  <h5 class="card-title mb-1">Live Camera Feed</h5>
-                  <p class="text-muted mb-0">Allow the browser to capture your face and record a short audio sample.</p>
-                </div>
-              </div>
-              <div class="camera-frame position-relative rounded-4 overflow-hidden">
-                <video id="videoPreview" class="w-100 h-100 d-none" playsinline muted></video>
-                <div id="cameraPlaceholder" class="camera-placeholder px-4 text-center">
-                  <p class="mb-2">Your camera preview will appear here.</p>
-                  <p class="small text-muted">Click Start Detection and allow camera + microphone access.</p>
-                </div>
-                <div id="videoOverlay" class="video-overlay d-none">
-                  <div class="text-center text-white px-3">
-                    <div class="spinner-border text-light" role="status"></div>
-                    <p class="mt-3 mb-0">Scanning your face and voice…</p>
-                  </div>
-                </div>
-              </div>
-              <div id="inputStatus" class="mt-3 text-muted">Camera and microphone status will appear here.</div>
-            </div>
-          </div>
-
-          <div id="fallbackCard" class="card mt-4 p-4 rounded-4 d-none border-0 bg-secondary bg-opacity-10">
-            <div>
-              <h5 class="card-title">Fallback mode</h5>
-              <p class="card-text text-muted">Your browser may not support camera or microphone access. Try switching devices or allowing permissions.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-xl-7">
-          <div class="position-relative">
-            <div id="loadingLayer" class="loading-layer d-none rounded-4">
-              <div class="text-center text-white px-4">
-                <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-3 mb-0">Detecting emotion… please wait.</p>
-              </div>
-            </div>
-            <div class="card h-100 rounded-4 border-0">
-              <div class="card-body p-4">
-                <div class="d-flex align-items-start justify-content-between mb-4">
-                  <div>
-                    <h5 class="card-title mb-1">Detection results</h5>
-                    <p class="text-muted mb-0">Your playlist will appear here once detection is complete.</p>
-                  </div>
-                </div>
-                <div id="resultSummary" class="mb-4 text-secondary">Press Start Detection to capture your mood.</div>
-                <div id="songResults"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div id="inputStatus" class="status-text">Ready — click Start Detection</div>
+        <div id="fallbackCard" class="fallback hidden">⚠️ Camera or mic not accessible. Check browser permissions.</div>
       </div>
 
-      <section class="mt-5">
-        <div class="row gy-4">
-          <div class="col-md-4">
-            <div class="info-card p-4 rounded-4 bg-info bg-opacity-10 border-0">
-              <h6>Face + Voice</h6>
-              <p class="mb-0 text-muted">Combined mood detection creates more accurate recommendations.</p>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="info-card p-4 rounded-4 bg-success bg-opacity-10 border-0">
-              <h6>Marathi playlist</h6>
-              <p class="mb-0 text-muted">Songs are sourced from the Marathi catalogue for a targeted listening experience.</p>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="info-card p-4 rounded-4 bg-warning bg-opacity-10 border-0">
-              <h6>Instant playback</h6>
-              <p class="mb-0 text-muted">Enjoy embedded YouTube previews and quick Spotify access for every suggestion.</p>
-            </div>
-          </div>
+      <div class="panel results-panel">
+        <div class="panel-header"><div class="panel-dot blue"></div><span>Your Playlist</span></div>
+        <div id="loadingLayer" class="loading-layer hidden">
+          <div class="loader"></div>
+          <p>Detecting emotion…</p>
         </div>
-      </section>
-    </main>
+        <div id="resultSummary" class="result-summary">Press <strong>Start Detection</strong> to capture your mood.</div>
+        <div id="songResults" class="song-list"></div>
+      </div>
+    </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-OERcA2zYw8u3oWxGhmNct0w4rbtlybJ2v5pa5tIpKTkk2K8xSvHU5awsuZVVFIhvj" crossorigin="anonymous"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-  </body>
+    <section class="info-strip">
+      <div class="info-item"><span class="info-icon">🎭</span><div><strong>Face + Voice</strong><p>Combined signals for smarter recommendations</p></div></div>
+      <div class="info-item"><span class="info-icon">🎵</span><div><strong>Marathi &amp; Hindi</strong><p>Curated catalogue of regional music</p></div></div>
+      <div class="info-item"><span class="info-icon">▶️</span><div><strong>YouTube + Spotify</strong><p>Embedded previews &amp; direct links</p></div></div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
 </html>
