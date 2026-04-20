@@ -1,256 +1,184 @@
-const startButton = document.getElementById('startButton');
-const videoPreview = document.getElementById('videoPreview');
-const videoOverlay = document.getElementById('videoOverlay');
+const startButton       = document.getElementById('startButton');
+const videoPreview      = document.getElementById('videoPreview');
+const videoOverlay      = document.getElementById('videoOverlay');
 const cameraPlaceholder = document.getElementById('cameraPlaceholder');
-const inputStatus = document.getElementById('inputStatus');
-const fallbackCard = document.getElementById('fallbackCard');
-const loadingLayer = document.getElementById('loadingLayer');
-const resultSummary = document.getElementById('resultSummary');
-const songResults = document.getElementById('songResults');
+const inputStatus       = document.getElementById('inputStatus');
+const fallbackCard      = document.getElementById('fallbackCard');
+const loadingLayer      = document.getElementById('loadingLayer');
+const resultSummary     = document.getElementById('resultSummary');
+const songResults       = document.getElementById('songResults');
 
 let currentStream = null;
 
-function setStatus(message, type = 'secondary') {
-  inputStatus.textContent = message;
-  inputStatus.className = `mt-3 text-${type}`;
+function setStatus(msg, color = '') {
+  inputStatus.textContent = msg;
+  inputStatus.style.color = color || 'var(--muted)';
 }
 
-function showFallback(message) {
-  fallbackCard.classList.remove('d-none');
-  setStatus(message, 'warning');
-}
-
-function showVideoOverlay(enabled) {
-  videoOverlay.classList.toggle('d-none', !enabled);
-  cameraPlaceholder.classList.toggle('d-none', enabled);
-}
-
-function showLoading(enabled) {
-  loadingLayer.classList.toggle('d-none', !enabled);
-  startButton.disabled = enabled;
+function showLoading(on) {
+  loadingLayer.classList.toggle('hidden', !on);
+  startButton.disabled = on;
 }
 
 function clearResults() {
-  resultSummary.textContent = '';
+  resultSummary.innerHTML = 'Analyzing your mood…';
   songResults.innerHTML = '';
 }
 
+/* ---- WAV encoder ---- */
 function encodeWav(samples, sampleRate) {
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-
-  function writeString(offset, string) {
-    for (let i = 0; i < string.length; i += 1) {
-      view.setUint8(offset + i, string.charCodeAt(i));
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  const f2pcm = (v2, off, inp) => {
+    for (let i = 0; i < inp.length; i++, off += 2) {
+      const s = Math.max(-1, Math.min(1, inp[i]));
+      v2.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     }
-  }
-
-  function floatTo16BitPCM(output, offset, input) {
-    for (let i = 0; i < input.length; i += 1, offset += 2) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    }
-  }
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, samples.length * 2, true);
-  floatTo16BitPCM(view, 44, samples);
-
-  return new Blob([view], { type: 'audio/wav' });
+  };
+  ws(0,'RIFF'); v.setUint32(4,36+samples.length*2,true); ws(8,'WAVE'); ws(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sampleRate,true); v.setUint32(28,sampleRate*2,true);
+  v.setUint16(32,2,true); v.setUint16(34,16,true); ws(36,'data');
+  v.setUint32(40,samples.length*2,true); f2pcm(v,44,samples);
+  return new Blob([buf], { type: 'audio/wav' });
 }
 
 function flattenBuffers(buffers) {
-  const length = buffers.reduce((acc, buffer) => acc + buffer.length, 0);
-  const result = new Float32Array(length);
+  const total = buffers.reduce((a, b) => a + b.length, 0);
+  const out = new Float32Array(total);
   let offset = 0;
-  buffers.forEach((buffer) => {
-    result.set(buffer, offset);
-    offset += buffer.length;
-  });
-  return result;
+  buffers.forEach(b => { out.set(b, offset); offset += b.length; });
+  return out;
 }
 
-function captureSnapshot() {
-  const canvas = document.createElement('canvas');
-  canvas.width = videoPreview.videoWidth || 640;
-  canvas.height = videoPreview.videoHeight || 480;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return null;
-  }
-  context.drawImage(videoPreview, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/png');
+async function recordAudio(stream, seconds = 4) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  const ctx = new AC();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const bufs = [];
+  proc.onaudioprocess = e => bufs.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(proc); proc.connect(ctx.destination);
+  await new Promise(r => setTimeout(r, seconds * 1000));
+  src.disconnect(); proc.disconnect(); await ctx.close();
+  return encodeWav(flattenBuffers(bufs), ctx.sampleRate || 22050);
 }
 
-async function recordAudio(stream, durationSeconds = 4) {
-  if (!window.AudioContext && !window.webkitAudioContext) {
-    return null;
-  }
-
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const recorder = audioContext.createScriptProcessor(4096, 1, 1);
-  const buffers = [];
-
-  recorder.onaudioprocess = (event) => {
-    const channelData = event.inputBuffer.getChannelData(0);
-    buffers.push(new Float32Array(channelData));
-  };
-
-  source.connect(recorder);
-  recorder.connect(audioContext.destination);
-
-  await new Promise((resolve) => setTimeout(resolve, durationSeconds * 1000));
-
-  source.disconnect();
-  recorder.disconnect();
-  await audioContext.close();
-
-  const samples = flattenBuffers(buffers);
-  const wavBlob = encodeWav(samples, audioContext.sampleRate || 22050);
-  return wavBlob;
-}
-
-async function captureMedia() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error('Camera and microphone are not supported in this browser.');
-  }
-
-  const constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true };
-  return navigator.mediaDevices.getUserMedia(constraints);
+function snapshot() {
+  const c = document.createElement('canvas');
+  c.width = videoPreview.videoWidth || 640;
+  c.height = videoPreview.videoHeight || 480;
+  c.getContext('2d').drawImage(videoPreview, 0, 0);
+  return c.toDataURL('image/png');
 }
 
 function toDataURL(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onloadend = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
   });
 }
 
-async function analyzeMood(photoData, audioData) {
-  const response = await fetch('/analyze', {
+async function callAnalyze(photo, audio) {
+  const res = await fetch('/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ photo: photoData, audio: audioData }),
+    body: JSON.stringify({ photo, audio })
   });
-  if (!response.ok) {
-    throw new Error('Server analysis failed');
-  }
-  return response.json();
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
 }
 
-function buildSongHtml(song) {
-  const embedded = song.youtubeEmbedId
-    ? `<iframe src="https://www.youtube.com/embed/${song.youtubeEmbedId}?rel=0" allowfullscreen title="YouTube player"></iframe>`
-    : '<div class="text-muted">No YouTube preview available.</div>';
+function buildSongCard(song) {
+  const embed = song.youtubeEmbedId
+    ? `<div class="song-embed"><iframe src="https://www.youtube.com/embed/${song.youtubeEmbedId}?rel=0" allowfullscreen loading="lazy"></iframe></div>`
+    : '<p class="no-embed">No YouTube preview available</p>';
 
-  const spotifyButton = song.spotify
-    ? `<a href="${song.spotify}" target="_blank" rel="noreferrer" class="btn btn-sm btn-outline-success">Open on Spotify</a>`
-    : '';
-
-  const youtubeButton = song.youtubeUrl
-    ? `<a href="${song.youtubeUrl}" target="_blank" rel="noreferrer" class="btn btn-sm btn-outline-danger">Watch on YouTube</a>`
-    : '';
+  const spotifyBtn = song.spotify
+    ? `<a href="${song.spotify}" target="_blank" rel="noreferrer" class="btn-link btn-spotify">▷ Spotify</a>` : '';
+  const ytBtn = song.youtubeUrl
+    ? `<a href="${song.youtubeUrl}" target="_blank" rel="noreferrer" class="btn-link btn-youtube">▷ YouTube</a>` : '';
 
   return `
-    <div class="card song-card">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-          <div>
-            <h5>${song.title}</h5>
-            <p class="mb-1 text-muted">${song.artist}</p>
-            <span class="badge bg-primary">Emotion: ${song.emotion}</span>
-          </div>
-          <div class="d-flex gap-2 flex-wrap">${spotifyButton}${youtubeButton}</div>
-        </div>
-        ${embedded}
+    <div class="song-card">
+      <div class="song-meta">
+        <div class="song-title">${song.title}</div>
+        <div class="song-artist">${song.artist}</div>
+        <span class="song-emotion">${song.emotion}</span>
       </div>
-    </div>
-  `;
-}
-
-async function stopStream(stream) {
-  if (!stream) {
-    return;
-  }
-  stream.getTracks().forEach((track) => track.stop());
-  videoPreview.srcObject = null;
-  cameraPlaceholder.classList.remove('d-none');
+      <div class="song-links">${spotifyBtn}${ytBtn}</div>
+      ${embed}
+    </div>`;
 }
 
 async function runDetection() {
   clearResults();
   showLoading(true);
-  showVideoOverlay(false);
-  resultSummary.textContent = 'Preparing camera and microphone...';
-  fallbackCard.classList.add('d-none');
+  fallbackCard.classList.add('hidden');
+  videoOverlay.classList.add('hidden');
+  cameraPlaceholder.classList.remove('hidden');
 
   try {
-    currentStream = await captureMedia();
+    setStatus('Requesting camera & microphone…');
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: true
+    });
+
     videoPreview.srcObject = currentStream;
-    videoPreview.classList.remove('d-none');
-    cameraPlaceholder.classList.add('d-none');
-    await new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 3000);
-      videoPreview.onloadeddata = () => {
-        clearTimeout(timeout);
-        resolve();
-      };
+    cameraPlaceholder.classList.add('hidden');
+    await new Promise(r => {
+      const t = setTimeout(r, 3000);
+      videoPreview.onloadeddata = () => { clearTimeout(t); r(); };
     });
     await videoPreview.play();
-    showVideoOverlay(true);
-    setStatus('Live feed active. Capturing audio and snapshot...', 'success');
+    videoOverlay.classList.remove('hidden');
+    setStatus('Live feed active — capturing 4 seconds…', 'var(--green)');
 
     const audioBlob = await recordAudio(currentStream, 4);
-    const photoData = captureSnapshot();
-    if (!photoData && !audioBlob) {
-      throw new Error('Unable to capture any inputs from your device.');
-    }
+    const photoData = snapshot();
+    videoOverlay.classList.add('hidden');
 
-    setStatus('Sending data to the server for emotion detection...', 'info');
+    setStatus('Sending to server for analysis…', 'var(--accent)');
     const audioData = audioBlob ? await toDataURL(audioBlob) : null;
-    const result = await analyzeMood(photoData, audioData);
+    const result = await callAnalyze(photoData, audioData);
 
+    /* Show emotion summary */
     const details = [];
-    if (result.facePrediction) {
-      details.push(`Face: ${result.facePrediction.label}`);
-    }
-    if (result.voicePrediction) {
-      details.push(`Voice: ${result.voicePrediction.label}`);
-    }
-    const summary = `Final emotion: <strong>${result.emotion}</strong> <small class="text-muted">(source: ${result.source})</small>`;
-    resultSummary.innerHTML = `${summary}${details.length ? `<div class="text-muted small mt-2">${details.join(' · ')}</div>` : ''}`;
-    songResults.innerHTML = result.songs.map(buildSongHtml).join('');
+    if (result.facePrediction) details.push(`Face: <b>${result.facePrediction.label}</b>`);
+    if (result.voicePrediction) details.push(`Voice: <b>${result.voicePrediction.label}</b>`);
+    resultSummary.innerHTML = `
+      Detected: <strong style="color:var(--text);font-size:1.1rem">${result.emotion}</strong>
+      <span style="color:var(--muted);font-size:0.8rem"> · ${Math.round(result.confidence * 100)}% confidence · source: ${result.source}</span>
+      ${details.length ? `<div style="margin-top:4px;font-size:0.8rem;color:var(--muted)">${details.join(' &nbsp;·&nbsp; ')}</div>` : ''}
+    `;
 
-    if (!result.songs.length) {
-      songResults.innerHTML = '<div class="alert alert-warning">No songs were found for the detected emotion.</div>';
+    if (!result.songs || result.songs.length === 0) {
+      songResults.innerHTML = '<div class="fallback" style="display:block">No songs found for this emotion. Try again!</div>';
+    } else {
+      songResults.innerHTML = result.songs.map(buildSongCard).join('');
     }
 
-    setStatus('Detection complete. Enjoy your curated playlist!', 'success');
-  } catch (error) {
-    console.error(error);
-    showFallback('Unable to access camera or microphone. Please allow permissions or use a compatible device.');
-    resultSummary.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+    setStatus('Done! Enjoy your playlist 🎵', 'var(--green)');
+
+  } catch (err) {
+    console.error(err);
+    fallbackCard.classList.remove('hidden');
+    resultSummary.innerHTML = `<span style="color:#fca5a5">Error: ${err.message}</span>`;
+    setStatus('Something went wrong. Try again.', 'var(--red)');
   } finally {
     showLoading(false);
-    showVideoOverlay(false);
-    await stopStream(currentStream);
-    cameraPlaceholder.classList.remove('d-none');
-    currentStream = null;
+    videoOverlay.classList.add('hidden');
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+      videoPreview.srcObject = null;
+      currentStream = null;
+    }
+    cameraPlaceholder.classList.remove('hidden');
   }
 }
 
